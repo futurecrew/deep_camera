@@ -22,6 +22,7 @@ import android.view.View.OnClickListener;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
@@ -127,6 +128,15 @@ public class MainActivity extends Activity {
             result = (info.orientation - degrees + 360) % 360;
         }
         mCamera.setDisplayOrientation(result);
+
+        if (degrees == 0 || degrees == 180) {
+            findViewById(R.id.buttonsLayout1).setVisibility(View.VISIBLE);
+            findViewById(R.id.buttonsLayout2).setVisibility(View.INVISIBLE);
+        } else {
+            findViewById(R.id.buttonsLayout1).setVisibility(View.INVISIBLE);
+            findViewById(R.id.buttonsLayout2).setVisibility(View.VISIBLE);
+        }
+
     }
 
     public void initialize() {

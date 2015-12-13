@@ -156,7 +156,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         switch (rotation) {
             case Surface.ROTATION_0:
                 width = 768;
-                height = 1082;
+                height = 1024;
                 Log.d(VIEW_LOG_TAG, "ROTATION_0");
                 break;
             case Surface.ROTATION_90:
@@ -177,6 +177,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         }
 
         setMeasuredDimension(width, height);
+        //setMeasuredDimension(768, 1200);
 
         if (mSupportedPreviewSizes != null) {
             mPreviewSize = getOptimalPreviewSize(mSupportedPreviewSizes, width, height);
