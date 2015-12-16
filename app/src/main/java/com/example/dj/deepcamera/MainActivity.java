@@ -9,8 +9,12 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.PictureCallback;
@@ -32,10 +36,18 @@ public class MainActivity extends Activity {
     private PictureCallback mPicture;
     private Button capture, switchCamera;
     private ImageButton playButton;
+    private ImageButton settingButton;
     private Context myContext;
     private LinearLayout cameraPreview;
     private boolean cameraFront = false;
+    private FeedReaderDbHelper mDbHelper;
+    private int mDbId;
+    private String mServerIp;
+    private String mServerPort;
+    private String mImageSize;
+    private String mMode;
     private boolean mPlay = false;
+    private final String TABLE_NAME = "setting_db";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -45,6 +57,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         myContext = this;
+
         initialize();
     }
 
@@ -149,33 +162,48 @@ public class MainActivity extends Activity {
         playButton = (ImageButton) findViewById(R.id.button_play);
         playButton.setOnClickListener(playButtonListener);
 
+        settingButton = (ImageButton) findViewById(R.id.button_setting);
+        settingButton.setOnClickListener(settingButtonListener);
 
+        mDbHelper = new FeedReaderDbHelper(this);
+        initializeDb();
     }
 
-    OnClickListener captrureListener = new OnClickListener() {
-        @Override
-        public void onClick(View v) {
-            mCamera.takePicture(null, null, mPicture);
-        }
-    };
+    private void initializeDb() {
+        SQLiteDatabase db = mDbHelper.getReadableDatabase();
 
-    OnClickListener switchCameraListener = new OnClickListener() {
-        @Override
-        public void onClick(View v) {
-            //get the number of cameras
-            int camerasNumber = Camera.getNumberOfCameras();
-            if (camerasNumber > 1) {
-                //release the old camera instance
-                //switch camera, from the front and the back and vice versa
+        String[] projection = {
+                "_id",
+                "server_ip",
+                "server_port",
+                "image_size",
+                "mode"
+        };
 
-                releaseCamera();
-                chooseCamera();
-            } else {
-                Toast toast = Toast.makeText(myContext, "Sorry, your phone has only one camera!", Toast.LENGTH_LONG);
-                toast.show();
-            }
+        Cursor c = db.query(TABLE_NAME, projection, null, null, null, null, null);
+        boolean exist = c.moveToFirst();
+
+        if (exist) {
+            mDbId = c.getInt(c.getColumnIndex("_id"));
+            mServerIp = c.getString(c.getColumnIndex("server_ip"));
+            mServerPort = c.getString(c.getColumnIndex("server_port"));
+            mImageSize = c.getString(c.getColumnIndex("image_size"));
+            mMode = c.getString(c.getColumnIndex("mode"));
+        } else {
+            mServerIp = "192.168.0.86";
+            mServerPort = "8080";
+            mImageSize = "800";
+            mMode = "1";
+
+            ContentValues values = new ContentValues();
+            values.put("server_ip", mServerIp);
+            values.put("server_port", mServerPort);
+            values.put("image_size", mImageSize);
+            values.put("mode", mMode);
+
+            mDbId = (int)db.insert(TABLE_NAME, null, values);
         }
-    };
+    }
 
     OnClickListener playButtonListener = new OnClickListener() {
         @Override
@@ -188,6 +216,43 @@ public class MainActivity extends Activity {
             }
         }
     };
+
+    OnClickListener settingButtonListener = new OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            Intent myIntent = new Intent(MainActivity.this, SettingActivity.class);
+            myIntent.putExtra("server_ip", mServerIp);
+            myIntent.putExtra("server_port", mServerPort);
+            myIntent.putExtra("image_size", mImageSize);
+            myIntent.putExtra("mode", mMode);
+            startActivityForResult(myIntent, 1);
+        }
+    };
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (resultCode == RESULT_OK)
+        {
+            if(requestCode==1)
+            {
+                mServerIp = data.getStringExtra("server_ip");
+                mServerPort = data.getStringExtra("server_port");
+                mImageSize = data.getStringExtra("image_size");
+                mMode = data.getStringExtra("mode");
+
+                ContentValues values = new ContentValues();
+                values.put("server_ip", mServerIp);
+                values.put("server_port", mServerPort);
+                values.put("image_size", mImageSize);
+                values.put("mode", mMode);
+
+                SQLiteDatabase db = mDbHelper.getReadableDatabase();
+                db.update(TABLE_NAME, values, "_id=?", new String[]{String.valueOf(mDbId)});
+            }
+        }
+    }
 
     public void chooseCamera() {
         //if the camera preview is the front
