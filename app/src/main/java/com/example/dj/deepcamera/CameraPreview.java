@@ -1,24 +1,46 @@
 package com.example.dj.deepcamera;
 
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
-
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.hardware.Camera;
+import android.os.AsyncTask;
+import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Log;
+import android.util.Pair;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.util.Arrays;
+import java.util.List;
+import java.util.ArrayList;
+
+import javax.net.ssl.HttpsURLConnection;
 
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
     private SurfaceHolder mHolder;
@@ -26,6 +48,10 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private List<Camera.Size> mSupportedPreviewSizes;
     private Camera.Size mPreviewSize;
     private Context mContext;
+    private String mServerIp;
+    private String mServerPort;
+    private String mImageSize;
+    private String mMode;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -41,6 +67,13 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         for(Camera.Size str: mSupportedPreviewSizes)
             Log.e(VIEW_LOG_TAG, str.width + "/" + str.height);
 
+    }
+
+    public void setServer(String mServerIp, String mServerPort, String mImageSize, String mMode) {
+        this.mServerIp = mServerIp;
+        this.mServerPort = mServerPort;
+        this.mImageSize = mImageSize;
+        this.mMode = mMode;
     }
 
     public void surfaceCreated(SurfaceHolder holder) {
@@ -88,8 +121,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                 public void onPreviewFrame(byte[] data, Camera camera) {
                     //Log.d("MyCam", "setPreviewCallback");
 
-                    if (true)
-                        return;
+                    //if (true)
+                    //    return;
 
                     Camera.Parameters params = mCamera.getParameters();
                     int w = params.getPreviewSize().width;
@@ -100,7 +133,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
                     Rect area = new Rect(0, 0, w, h);
                     image.compressToJpeg(area, 50, out);
-                    Bitmap captureImg = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size());
+                    //Bitmap captureImg = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size());
 
 
                     FileOutputStream fOut = null;
@@ -108,14 +141,26 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                         String path = Environment.getExternalStorageDirectory().toString() + "/data/camera";
                         File file = new File(path, System.currentTimeMillis() + ".jpg"); // the File to save to
                         fOut = new FileOutputStream(file);
-                        captureImg.compress(Bitmap.CompressFormat.JPEG, 85, fOut); // saving the Bitmap to a file compressed as a JPEG with 85% compression rate
+                        //ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                        //captureImg.compress(Bitmap.CompressFormat.JPEG, 85, fOut); // saving the Bitmap to a file compressed as a JPEG with 85% compression rate
+                        //captureImg.compress(Bitmap.CompressFormat.JPEG, 85, bos); // saving the Bitmap to a file compressed as a JPEG with 85% compression rate
+                        //byte[] buffer = bos.toByteArray();
+                        byte[] buffer = out.toByteArray();
+                        fOut.write(buffer);
+                        fOut.close();
+
+                        String url = "http://" + mServerIp + ":" + mServerPort;
+
+                        Log.d(VIEW_LOG_TAG, "calling ProcessHttpTask() w:" + w + ", h:" + h);
+
+                        new ProcessHttpTask(url, mMode, buffer).execute();
+
                     } catch (Exception e) {
                         e.printStackTrace();
                     } finally {
                         try {
-                            if (fOut != null) {
+                            if (fOut != null)
                                 fOut.close();
-                            }
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -214,5 +259,94 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             }
         }
         return optimalSize;
+    }
+}
+
+//AsyncTask<Params,Progress,Result>
+class ProcessHttpTask extends AsyncTask<Void, Void, Void> {
+    private String url;
+    private String mode;
+    private byte[] data;
+
+    public ProcessHttpTask(String url, String mode, byte[] data) {
+        this.url = url;
+        this.mode = mode;
+        this.data = data;
+    }
+
+    @Override
+    protected Void doInBackground(Void... params) {
+        OutputStream outputToServer = null;
+
+        //Log.d("View", "doInBackground");
+
+        try {
+            String charset = "UTF-8";  // Or in Java 7 and later, use the constant: java.nio.charset.StandardCharsets.UTF_8.name()
+
+            HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
+            connection.setReadTimeout(10000);
+            connection.setConnectTimeout(15000);
+            connection.setRequestMethod("POST");
+            connection.setDoInput(true);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "image/jpeg");
+            //connection.setRequestProperty("Accept-Charset", charset);
+            //connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded;charset=" + charset);
+
+
+            OutputStream os = connection.getOutputStream();
+            os.write(data);
+            os.flush();
+            os.close();
+
+            connection.connect();
+
+            String response = "";
+            int responseCode=connection.getResponseCode();
+
+            if (responseCode == HttpsURLConnection.HTTP_OK) {
+                String line;
+                BufferedReader br=new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                while ((line=br.readLine()) != null) {
+                    response+=line;
+                }
+            }
+            else response = "";
+
+            Log.d("View", "response : " + response);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+
+            if (outputToServer != null) {
+                try {
+                    outputToServer.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return null;
+    }
+
+    private String getQuery(List<Pair> params) throws UnsupportedEncodingException
+    {
+        StringBuilder result = new StringBuilder();
+        boolean first = true;
+
+        for (Pair pair : params)
+        {
+            if (first)
+                first = false;
+            else
+                result.append("&");
+
+            result.append(URLEncoder.encode((String)pair.first, "UTF-8"));
+            result.append("=");
+            result.append(URLEncoder.encode((String)pair.second, "UTF-8"));
+        }
+
+        return result.toString();
     }
 }

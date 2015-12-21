@@ -153,23 +153,25 @@ public class MainActivity extends Activity {
     }
 
     public void initialize() {
+        initializeDb();
+
         mCamera = Camera.open(findBackFacingCamera());
 
         cameraPreview = (LinearLayout) findViewById(R.id.camera_preview);
         mPreview = new CameraPreview(myContext, mCamera);
         cameraPreview.addView(mPreview);
 
+        mPreview.setServer(mServerIp, mServerPort, mImageSize, mMode);
+
         playButton = (ImageButton) findViewById(R.id.button_play);
         playButton.setOnClickListener(playButtonListener);
 
         settingButton = (ImageButton) findViewById(R.id.button_setting);
         settingButton.setOnClickListener(settingButtonListener);
-
-        mDbHelper = new FeedReaderDbHelper(this);
-        initializeDb();
     }
 
     private void initializeDb() {
+        mDbHelper = new FeedReaderDbHelper(this);
         SQLiteDatabase db = mDbHelper.getReadableDatabase();
 
         String[] projection = {
@@ -250,6 +252,8 @@ public class MainActivity extends Activity {
 
                 SQLiteDatabase db = mDbHelper.getReadableDatabase();
                 db.update(TABLE_NAME, values, "_id=?", new String[]{String.valueOf(mDbId)});
+
+                mPreview.setServer(mServerIp, mServerPort, mImageSize, mMode);
             }
         }
     }
