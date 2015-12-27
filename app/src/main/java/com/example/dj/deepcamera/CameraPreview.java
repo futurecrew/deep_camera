@@ -48,13 +48,19 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private Camera mCamera;
     private String img_folder;
     private List<Camera.Size> mSupportedPreviewSizes;
-    private Camera.Size mPreviewSize;
-    private Camera.Size mPictureSize;
+    //private Camera.Size mPreviewSize;
+    //private Camera.Size mPictureSize;
     private Context mContext;
     private String mServerIp;
     private String mServerPort;
     private String mImageSize;
     private String mMode;
+    int mPreviewWidth;
+    int mPreviewHeight;
+    int mPictureWidth;
+    int mPictureHeight;
+    int mDisplayWidth;
+    int mDisplayHeight;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -87,23 +93,44 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         int width = display.getWidth();
         int height = display.getHeight();
 
+        Log.d(VIEW_LOG_TAG, "[display] width: " + width + ", height :" + height);
 
         Camera.Parameters parameters = mCamera.getParameters();
         if(parameters != null) {
             List<Camera.Size> pictureSizeList = parameters.getSupportedPictureSizes();
             for (Camera.Size size : pictureSizeList) {
-                Log.d(VIEW_LOG_TAG, "[picture] width: " + size.width + "(" + width + ")" +
-                        "height :" + size.height + "(" + height + ")");
+                Log.d(VIEW_LOG_TAG, "[picture] width: " + size.width + ", height :" + size.height);
             } //지원하는 사진의 크기
 
 
             List<Camera.Size> previewSizeList = parameters.getSupportedPreviewSizes();
             for (Camera.Size size : previewSizeList) {
-                Log.d(VIEW_LOG_TAG, "[preview] width: " + size.width + "(" + width + ")" +
-                        "height :" + size.height + "(" + height + ")");
+                Log.d(VIEW_LOG_TAG, "[preview] width: " + size.width + ", height :" + size.height);
             } //지원하는 프리뷰 크기
         }
 
+
+        // preview : good, file : bad
+        //mPreviewWidth = 1280;
+        //mPreviewHeight = 800;
+
+        // preview : good, file : good (1280x960)
+        mPreviewWidth = 1280;
+        mPreviewHeight = 960;
+
+        // preview : stretched, file : good (1280x768)
+        //mPreviewWidth = 1280;
+        //mPreviewHeight = 768;
+
+        // preview : good, file : good (640x480)
+        //mPreviewWidth = 1080;
+        //mPreviewHeight = 1920;
+
+        mPictureWidth = mPreviewWidth;
+        mPictureHeight = mPreviewHeight;
+
+        mDisplayWidth = 768;
+        mDisplayHeight = 1024;
     }
 
     public void setServer(String mServerIp, String mServerPort, String mImageSize, String mMode) {
@@ -143,15 +170,15 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         // start preview with new settings
         setCamera(camera);
         try {
-            Log.e(VIEW_LOG_TAG, "mPreviewSize = " + mPreviewSize.width + "/" + mPreviewSize.height);
+            Log.e(VIEW_LOG_TAG, "mPreviewSize = " + mPreviewWidth + "/" + mPreviewHeight);
 
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
 
 
             Camera.Parameters parameters = mCamera.getParameters();
-            parameters.setPreviewSize(mPreviewSize.width, mPreviewSize.height);
-            parameters.setPictureSize(mPictureSize.width, mPictureSize.height);
+            parameters.setPreviewSize(mPreviewWidth, mPreviewHeight);
+            parameters.setPictureSize(mPictureWidth, mPictureHeight);
             parameters.setFocusMode(parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
             mCamera.setParameters(parameters);
 
@@ -261,31 +288,20 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         //int width = resolveSize(getSuggestedMinimumWidth(), widthMeasureSpec);
         //int height = resolveSize(getSuggestedMinimumHeight(), heightMeasureSpec);
 
-        //int width = 768;
-        //int height = 1280;
-        int width = 1080;
-        int height = 1920;
-
-        int displayWidth = 768;
-        int displayHeight = 1024;
         int temp = 0;
 
         if (mSupportedPreviewSizes != null) {
-            //mPreviewSize = getOptimalPreviewSize(mSupportedPreviewSizes, width, height);
-            mPreviewSize = mCamera.new Size(width, height);
-            mPictureSize = mPreviewSize;
-
             final int rotation = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getOrientation();
             switch (rotation) {
                 case Surface.ROTATION_90:
                 case Surface.ROTATION_270:
-                    temp = displayWidth;
-                    displayWidth = displayHeight;
-                    displayHeight = temp;
+                    temp = mDisplayWidth;
+                    mDisplayWidth = mDisplayHeight;
+                    mDisplayHeight = temp;
                     Log.d(VIEW_LOG_TAG, "ROTATION_90");
                     break;
             }
-            setMeasuredDimension(displayWidth, displayHeight);
+            setMeasuredDimension(mDisplayWidth, mDisplayHeight);
         }
     }
 
