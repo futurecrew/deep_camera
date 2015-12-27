@@ -14,6 +14,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.util.Pair;
+import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -45,8 +46,10 @@ import javax.net.ssl.HttpsURLConnection;
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
     private SurfaceHolder mHolder;
     private Camera mCamera;
+    private String img_folder;
     private List<Camera.Size> mSupportedPreviewSizes;
     private Camera.Size mPreviewSize;
+    private Camera.Size mPictureSize;
     private Context mContext;
     private String mServerIp;
     private String mServerPort;
@@ -62,10 +65,44 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         // deprecated setting, but required on Android versions prior to 3.0
         mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 
+        img_folder = Environment.getExternalStorageDirectory().toString() + "/data/camera";
+        File dir = new File(img_folder);
+        if (dir.isDirectory())
+        {
+            String[] children = dir.list();
+            for (int i = 0; i < children.length; i++)
+            {
+                new File(dir, children[i]).delete();
+            }
+        }
+
         // supported preview sizes
         mSupportedPreviewSizes = mCamera.getParameters().getSupportedPreviewSizes();
         for(Camera.Size str: mSupportedPreviewSizes)
             Log.e(VIEW_LOG_TAG, str.width + "/" + str.height);
+
+
+        Display display = ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay() ;
+
+        int width = display.getWidth();
+        int height = display.getHeight();
+
+
+        Camera.Parameters parameters = mCamera.getParameters();
+        if(parameters != null) {
+            List<Camera.Size> pictureSizeList = parameters.getSupportedPictureSizes();
+            for (Camera.Size size : pictureSizeList) {
+                Log.d(VIEW_LOG_TAG, "[picture] width: " + size.width + "(" + width + ")" +
+                        "height :" + size.height + "(" + height + ")");
+            } //지원하는 사진의 크기
+
+
+            List<Camera.Size> previewSizeList = parameters.getSupportedPreviewSizes();
+            for (Camera.Size size : previewSizeList) {
+                Log.d(VIEW_LOG_TAG, "[preview] width: " + size.width + "(" + width + ")" +
+                        "height :" + size.height + "(" + height + ")");
+            } //지원하는 프리뷰 크기
+        }
 
     }
 
@@ -114,9 +151,35 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
             Camera.Parameters parameters = mCamera.getParameters();
             parameters.setPreviewSize(mPreviewSize.width, mPreviewSize.height);
+            parameters.setPictureSize(mPictureSize.width, mPictureSize.height);
             parameters.setFocusMode(parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
             mCamera.setParameters(parameters);
 
+            mCamera.setPreviewCallback(new Camera.PreviewCallback() {
+                public void onPreviewFrame(byte[] data, Camera camera) {
+                    try {
+                        Camera.Parameters parameters = camera.getParameters();
+                        Camera.Size previewSize = parameters.getPreviewSize();
+                        Camera.Size pictureSize = parameters.getPictureSize();
+                        YuvImage image = new YuvImage(data, parameters.getPreviewFormat(),
+                                previewSize.width, previewSize.height, null);
+
+                        Log.e(VIEW_LOG_TAG, "onPreviewFrame data.length = " + data.length + ", format = " + parameters.getPreviewFormat());
+                        Log.e(VIEW_LOG_TAG, "onPreviewFrame previewSize = (" + previewSize.width + ", " + previewSize.height + ")");
+                        Log.e(VIEW_LOG_TAG, "onPreviewFrame pictureSize = (" + pictureSize.width + ", " + pictureSize.height + ")");
+                        Log.e(VIEW_LOG_TAG, "onPreviewFrame image = (" + image.getWidth() + ", " + image.getHeight() + ")");
+
+                        File file = new File(img_folder, System.currentTimeMillis() + ".jpg"); // the File to save to
+                        FileOutputStream filecon = new FileOutputStream(file);
+                        image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 90, filecon);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
+
+            /*
             mCamera.setPreviewCallback(new Camera.PreviewCallback() {
                 public void onPreviewFrame(byte[] data, Camera camera) {
                     //Log.d("MyCam", "setPreviewCallback");
@@ -125,21 +188,20 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                     //    return;
 
                     Camera.Parameters params = mCamera.getParameters();
-                    int w = params.getPreviewSize().width;
-                    int h = params.getPreviewSize().height;
+                    //int w = params.getPreviewSize().width;
+                    //int h = params.getPreviewSize().height;
                     int format = params.getPreviewFormat();
-                    YuvImage image = new YuvImage(data, format, w, h, null);
+                    YuvImage image = new YuvImage(data, format, mPictureSize.width, mPictureSize.height, null);
 
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
-                    Rect area = new Rect(0, 0, w, h);
+                    Rect area = new Rect(0, 0, mPictureSize.width, mPictureSize.height);
                     image.compressToJpeg(area, 50, out);
                     //Bitmap captureImg = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size());
 
 
                     FileOutputStream fOut = null;
                     try {
-                        String path = Environment.getExternalStorageDirectory().toString() + "/data/camera";
-                        File file = new File(path, System.currentTimeMillis() + ".jpg"); // the File to save to
+                        File file = new File(img_folder, System.currentTimeMillis() + ".jpg"); // the File to save to
                         fOut = new FileOutputStream(file);
                         //ByteArrayOutputStream bos = new ByteArrayOutputStream();
                         //captureImg.compress(Bitmap.CompressFormat.JPEG, 85, fOut); // saving the Bitmap to a file compressed as a JPEG with 85% compression rate
@@ -151,7 +213,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
                         String url = "http://" + mServerIp + ":" + mServerPort;
 
-                        Log.d(VIEW_LOG_TAG, "calling ProcessHttpTask() w:" + w + ", h:" + h);
+                        Log.d(VIEW_LOG_TAG, "calling ProcessHttpTask() mPictureSize.width:" + mPictureSize.width + ", mPictureSize.height:" + mPictureSize.height);
 
                         new ProcessHttpTask(url, mMode, buffer).execute();
 
@@ -169,6 +231,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
                 }
             });
+            */
+
         } catch (Exception e) {
             Log.d(VIEW_LOG_TAG, "Error starting camera preview: " + e.getMessage());
         }
@@ -194,38 +258,34 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int width = resolveSize(getSuggestedMinimumWidth(), widthMeasureSpec);
-        int height = resolveSize(getSuggestedMinimumHeight(), heightMeasureSpec);
+        //int width = resolveSize(getSuggestedMinimumWidth(), widthMeasureSpec);
+        //int height = resolveSize(getSuggestedMinimumHeight(), heightMeasureSpec);
 
-        final int rotation = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getOrientation();
-        switch (rotation) {
-            case Surface.ROTATION_0:
-                width = 768;
-                height = 1024;
-                Log.d(VIEW_LOG_TAG, "ROTATION_0");
-                break;
-            case Surface.ROTATION_90:
-                width = 1024;
-                height = 768;
-                Log.d(VIEW_LOG_TAG, "ROTATION_90");
-                break;
-            case Surface.ROTATION_180:
-                width = 1024;
-                height = 768;
-                Log.d(VIEW_LOG_TAG, "ROTATION_180");
-                break;
-            default:
-                width = 1024;
-                height = 768;
-                Log.d(VIEW_LOG_TAG, "default");
-                break;
-        }
+        //int width = 768;
+        //int height = 1280;
+        int width = 1080;
+        int height = 1920;
 
-        setMeasuredDimension(width, height);
-        //setMeasuredDimension(768, 1200);
+        int displayWidth = 768;
+        int displayHeight = 1024;
+        int temp = 0;
 
         if (mSupportedPreviewSizes != null) {
-            mPreviewSize = getOptimalPreviewSize(mSupportedPreviewSizes, width, height);
+            //mPreviewSize = getOptimalPreviewSize(mSupportedPreviewSizes, width, height);
+            mPreviewSize = mCamera.new Size(width, height);
+            mPictureSize = mPreviewSize;
+
+            final int rotation = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getOrientation();
+            switch (rotation) {
+                case Surface.ROTATION_90:
+                case Surface.ROTATION_270:
+                    temp = displayWidth;
+                    displayWidth = displayHeight;
+                    displayHeight = temp;
+                    Log.d(VIEW_LOG_TAG, "ROTATION_90");
+                    break;
+            }
+            setMeasuredDimension(displayWidth, displayHeight);
         }
     }
 
@@ -239,6 +299,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         double minDiff = Double.MAX_VALUE;
 
         int targetHeight = h;
+
+        Log.d(VIEW_LOG_TAG, "getOptimalPreviewSize() w:" + w + ", h:" + h);
 
         for (Camera.Size size : sizes) {
             double ratio = (double) size.width / size.height;
@@ -313,7 +375,7 @@ class ProcessHttpTask extends AsyncTask<Void, Void, Void> {
             }
             else response = "";
 
-            Log.d("View", "response : " + response);
+            //Log.d("View", "response : " + response);
         }
         catch (Exception e) {
             e.printStackTrace();
