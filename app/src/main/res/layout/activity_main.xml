@@ -39,7 +39,7 @@
             android:layout_width="74dp"
             android:layout_height="74dp"
             android:id="@+id/button_play"
-            android:src="@drawable/play"
+            android:src="@drawable/stop"
             android:scaleType="fitStart"
             android:background="@null"
             android:padding="1dp"
@@ -73,8 +73,8 @@
         <ImageButton
             android:layout_width="74dp"
             android:layout_height="74dp"
-            android:id="@+id/button_play"
-            android:src="@drawable/play"
+            android:id="@+id/button_play2"
+            android:src="@drawable/stop"
             android:scaleType="fitStart"
             android:background="@null"
             android:padding="1dp"
@@ -83,7 +83,7 @@
         <ImageButton
             android:layout_width="70dp"
             android:layout_height="67dp"
-            android:id="@+id/button_setting"
+            android:id="@+id/button_setting2"
             android:src="@drawable/setting"
             android:scaleType="fitCenter"
             android:background="@null"

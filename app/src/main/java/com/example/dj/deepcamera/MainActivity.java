@@ -37,6 +37,8 @@ public class MainActivity extends Activity {
     private Button capture, switchCamera;
     private ImageButton playButton;
     private ImageButton settingButton;
+    private ImageButton playButton2;
+    private ImageButton settingButton2;
     private Context myContext;
     private LinearLayout cameraPreview;
     private boolean cameraFront = false;
@@ -46,7 +48,7 @@ public class MainActivity extends Activity {
     private String mServerPort;
     private String mImageSize;
     private String mMode;
-    private boolean mPlay = false;
+    private boolean mPlay = true;
     private final String TABLE_NAME = "setting_db";
 
     @Override
@@ -168,6 +170,14 @@ public class MainActivity extends Activity {
 
         settingButton = (ImageButton) findViewById(R.id.button_setting);
         settingButton.setOnClickListener(settingButtonListener);
+
+        playButton2 = (ImageButton) findViewById(R.id.button_play2);
+        playButton2.setOnClickListener(playButtonListener2);
+
+        settingButton = (ImageButton) findViewById(R.id.button_setting2);
+        settingButton.setOnClickListener(settingButtonListener2);
+
+        mPreview.setPlay(true);
     }
 
     private void initializeDb() {
@@ -211,15 +221,47 @@ public class MainActivity extends Activity {
         @Override
         public void onClick(View v) {
             mPlay = !mPlay;
+            Log.e("View", "playButtonListener mPlay : " + mPlay);
+
             if (mPlay) {
                 playButton.setImageResource(R.drawable.stop);
+                mPreview.setPlay(true);
             } else {
                 playButton.setImageResource(R.drawable.play);
+                mPreview.setPlay(false);
+            }
+        }
+    };
+
+    OnClickListener playButtonListener2 = new OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            mPlay = !mPlay;
+            Log.e("View", "playButtonListener mPlay : " + mPlay);
+
+            if (mPlay) {
+                playButton2.setImageResource(R.drawable.stop);
+                mPreview.setPlay(true);
+            } else {
+                playButton2.setImageResource(R.drawable.play);
+                mPreview.setPlay(false);
             }
         }
     };
 
     OnClickListener settingButtonListener = new OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            Intent myIntent = new Intent(MainActivity.this, SettingActivity.class);
+            myIntent.putExtra("server_ip", mServerIp);
+            myIntent.putExtra("server_port", mServerPort);
+            myIntent.putExtra("image_size", mImageSize);
+            myIntent.putExtra("mode", mMode);
+            startActivityForResult(myIntent, 1);
+        }
+    };
+
+    OnClickListener settingButtonListener2 = new OnClickListener() {
         @Override
         public void onClick(View v) {
             Intent myIntent = new Intent(MainActivity.this, SettingActivity.class);

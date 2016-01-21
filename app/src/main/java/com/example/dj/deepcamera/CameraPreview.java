@@ -46,6 +46,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -61,6 +63,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private String mServerPort;
     private String mImageSize;
     private String mMode;
+    private int rotationDegree;
+    boolean play;
     int mPreviewWidth;
     int mPreviewHeight;
     int mPictureWidth;
@@ -124,6 +128,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         mPreviewWidth = 1280;
         mPreviewHeight = 960;
 
+
         // preview : stretched, file : good (1280x768)
         //mPreviewWidth = 1280;
         //mPreviewHeight = 768;
@@ -132,8 +137,11 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         //mPreviewWidth = 1080;
         //mPreviewHeight = 1920;
 
-        mPictureWidth = mPreviewWidth;
-        mPictureHeight = mPreviewHeight;
+        //mPictureWidth = mPreviewWidth;
+        //mPictureHeight = mPreviewHeight;
+
+        mPictureWidth = 960;
+        mPictureHeight = 1280;
 
         mDisplayWidth = 768;
         mDisplayHeight = 1024;
@@ -146,6 +154,10 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         this.mMode = mMode;
     }
 
+    public void setPlay(boolean play) {
+        this.play = play;
+    }
+
     public void surfaceCreated(SurfaceHolder holder) {
         try {
             // create the surface and start camera preview
@@ -156,6 +168,34 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         } catch (IOException e) {
             Log.d(VIEW_LOG_TAG, "Error setting camera preview: " + e.getMessage());
         }
+    }
+
+    private byte[] rotateYUV420Degree90(byte[] data, int imageWidth, int imageHeight)
+    {
+        byte [] yuv = new byte[imageWidth*imageHeight*3/2];
+        // Rotate the Y luma
+        int i = 0;
+        for(int x = 0;x < imageWidth;x++)
+        {
+            for(int y = imageHeight-1;y >= 0;y--)
+            {
+                yuv[i] = data[y*imageWidth+x];
+                i++;
+            }
+        }
+        // Rotate the U and V color components
+        i = imageWidth*imageHeight*3/2-1;
+        for(int x = imageWidth-1;x > 0;x=x-2)
+        {
+            for(int y = 0;y < imageHeight/2;y++)
+            {
+                yuv[i] = data[(imageWidth * imageHeight) + (y * imageWidth) + x];
+                i--;
+                yuv[i] = data[(imageWidth*imageHeight)+(y*imageWidth)+(x -1)];
+                i--;
+            }
+        }
+        return yuv;
     }
 
     public void refreshCamera(Camera camera) {
@@ -188,47 +228,33 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             parameters.setFocusMode(parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
             mCamera.setParameters(parameters);
 
-            /*
-            mCamera.setPreviewCallback(new Camera.PreviewCallback() {
-                public void onPreviewFrame(byte[] data, Camera camera) {
-                    try {
-                        Camera.Parameters parameters = camera.getParameters();
-                        Camera.Size previewSize = parameters.getPreviewSize();
-                        Camera.Size pictureSize = parameters.getPictureSize();
-                        YuvImage image = new YuvImage(data, parameters.getPreviewFormat(),
-                                previewSize.width, previewSize.height, null);
-
-                        Log.e(VIEW_LOG_TAG, "onPreviewFrame data.length = " + data.length + ", format = " + parameters.getPreviewFormat());
-                        Log.e(VIEW_LOG_TAG, "onPreviewFrame previewSize = (" + previewSize.width + ", " + previewSize.height + ")");
-                        Log.e(VIEW_LOG_TAG, "onPreviewFrame pictureSize = (" + pictureSize.width + ", " + pictureSize.height + ")");
-                        Log.e(VIEW_LOG_TAG, "onPreviewFrame image = (" + image.getWidth() + ", " + image.getHeight() + ")");
-
-                        File file = new File(img_folder, System.currentTimeMillis() + ".jpg"); // the File to save to
-                        FileOutputStream filecon = new FileOutputStream(file);
-                        image.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 90, filecon);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            });
-            */
-
+            final ExecutorService executor = Executors.newFixedThreadPool(10);
 
             mCamera.setPreviewCallback(new Camera.PreviewCallback() {
                 public void onPreviewFrame(byte[] data, Camera camera) {
                     //Log.d("MyCam", "setPreviewCallback");
 
-                    //if (true)
-                    //    return;
+                    if (play == false)
+                        return;
 
                     Camera.Parameters parameters = camera.getParameters();
                     Camera.Size previewSize = parameters.getPreviewSize();
                     Camera.Size pictureSize = parameters.getPictureSize();
+
                     YuvImage image = new YuvImage(data, parameters.getPreviewFormat(),
                             previewSize.width, previewSize.height, null);
 
+                    if (rotationDegree == 0) {
+                        byte[] yuvData = image.getYuvData();
+                        byte[] newYuvData = rotateYUV420Degree90(yuvData, previewSize.width, previewSize.height);
+                        image = new YuvImage(newYuvData, image.getYuvFormat(), image.getHeight(), image.getWidth(), null);
+                    }
+
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
-                    Rect area = new Rect(0, 0, image.getWidth(), image.getHeight());
+
+                    float ratio = Float.parseFloat(mImageSize) / Math.max(image.getWidth(), image.getHeight());
+
+                    Rect area = new Rect(0, 0, (int)(image.getWidth() * ratio), (int)(image.getHeight() * ratio));
                     image.compressToJpeg(area, 50, out);
                     //Bitmap captureImg = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size());
 
@@ -250,7 +276,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
                         Log.d(VIEW_LOG_TAG, "calling ProcessHttpTask() " + image.getWidth() + ", " + image.getHeight());
 
-                        new ProcessHttpTask(url, mMode, fileName, buffer).execute();
+                        Runnable thread = new ProcessHttpTask(url, mMode, fileName, buffer);
+                        executor.execute(thread);
 
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -303,27 +330,33 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             final int rotation = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getOrientation();
             switch (rotation) {
                 case Surface.ROTATION_0:
+                    rotationDegree = 0;
                     newDisplayWidth = mDisplayWidth;
                     newDisplayHeight = mDisplayHeight;
                     Log.d(VIEW_LOG_TAG, "ROTATION_0");
                     break;
                 case Surface.ROTATION_90:
+                    rotationDegree = 90;
                     newDisplayWidth = mDisplayHeight;
                     newDisplayHeight = mDisplayWidth;
                     Log.d(VIEW_LOG_TAG, "ROTATION_90");
                     break;
                 case Surface.ROTATION_180:
+                    rotationDegree = 180;
                     newDisplayWidth = mDisplayWidth;
                     newDisplayHeight = mDisplayHeight;
                     Log.d(VIEW_LOG_TAG, "ROTATION_180");
                     break;
                 case Surface.ROTATION_270:
+                    rotationDegree = 270;
                     newDisplayWidth = mDisplayHeight;
                     newDisplayHeight = mDisplayWidth;
                     Log.d(VIEW_LOG_TAG, "ROTATION_270");
                     break;
             }
             setMeasuredDimension(newDisplayWidth, newDisplayHeight);
+
+            Log.d(VIEW_LOG_TAG, "onMeasure() w:" + newDisplayWidth + ", h:" + newDisplayHeight);
         }
     }
 
@@ -362,8 +395,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     }
 }
 
-//AsyncTask<Params,Progress,Result>
-class ProcessHttpTask extends AsyncTask<Void, Void, Void> {
+class ProcessHttpTask implements Runnable {
     private String url;
     private String mode;
     private String fileName;
@@ -435,7 +467,7 @@ class ProcessHttpTask extends AsyncTask<Void, Void, Void> {
 */
 
     @Override
-    protected Void doInBackground(Void... params) {
+    public void run() {
         OutputStream outputToServer = null;
 
         Log.d("View", "doInBackground");
@@ -451,7 +483,7 @@ class ProcessHttpTask extends AsyncTask<Void, Void, Void> {
             byte[] postData       = urlParameters.getBytes( StandardCharsets.UTF_8 );
             int    postDataLength = postData.length;
             //String request        = "http://www.google.com";
-            String request        = "http://192.168.0.18:8080/update/";
+            String request        = "http://192.168.0.18:8080/";
             URL    url            = new URL( request );
             HttpURLConnection conn= (HttpURLConnection) url.openConnection();
             conn.setDoOutput(true);
@@ -588,7 +620,6 @@ class ProcessHttpTask extends AsyncTask<Void, Void, Void> {
                 }
             }
         }
-        return null;
     }
 
 
