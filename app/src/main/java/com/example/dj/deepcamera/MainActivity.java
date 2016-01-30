@@ -15,6 +15,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.PictureCallback;
@@ -33,7 +36,6 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private Camera mCamera;
     private CameraPreview mPreview;
-    private PictureCallback mPicture;
     private Button capture, switchCamera;
     private ImageButton playButton;
     private ImageButton settingButton;
@@ -41,6 +43,7 @@ public class MainActivity extends Activity {
     private ImageButton settingButton2;
     private Context myContext;
     private LinearLayout cameraPreview;
+    private ImageView imageView;
     private boolean cameraFront = false;
     private FeedReaderDbHelper mDbHelper;
     private int mDbId;
@@ -48,7 +51,7 @@ public class MainActivity extends Activity {
     private String mServerPort;
     private String mImageSize;
     private String mMode;
-    private boolean mPlay = true;
+    private boolean mPlay;
     private final String TABLE_NAME = "setting_db";
 
     @Override
@@ -116,7 +119,6 @@ public class MainActivity extends Activity {
                 mCamera = Camera.open(findBackFacingCamera());
                 Log.e("View", "Camera.open() in onResume()");
             }
-            mPicture = getPictureCallback();
             mPreview.refreshCamera(mCamera);
         //}
 
@@ -147,9 +149,11 @@ public class MainActivity extends Activity {
         if (degrees == 0 || degrees == 180) {
             findViewById(R.id.buttonsLayout1).setVisibility(View.VISIBLE);
             findViewById(R.id.buttonsLayout2).setVisibility(View.INVISIBLE);
+            imageView.setPadding(0, 0, 0, 100);
         } else {
             findViewById(R.id.buttonsLayout1).setVisibility(View.INVISIBLE);
             findViewById(R.id.buttonsLayout2).setVisibility(View.VISIBLE);
+            imageView.setPadding(0, 0, 0, 0);
         }
 
     }
@@ -160,10 +164,13 @@ public class MainActivity extends Activity {
         mCamera = Camera.open(findBackFacingCamera());
 
         cameraPreview = (LinearLayout) findViewById(R.id.camera_preview);
-        mPreview = new CameraPreview(myContext, mCamera);
+        imageView = (ImageView) findViewById(R.id.imageView);
+
+        mPreview = new CameraPreview(myContext, mCamera, imageView);
         cameraPreview.addView(mPreview);
 
         mPreview.setServer(mServerIp, mServerPort, mImageSize, mMode);
+
 
         playButton = (ImageButton) findViewById(R.id.button_play);
         playButton.setOnClickListener(playButtonListener);
@@ -177,7 +184,9 @@ public class MainActivity extends Activity {
         settingButton = (ImageButton) findViewById(R.id.button_setting2);
         settingButton.setOnClickListener(settingButtonListener2);
 
-        mPreview.setPlay(true);
+        mPlay = false;
+
+        setPlayButton();
     }
 
     private void initializeDb() {
@@ -217,59 +226,57 @@ public class MainActivity extends Activity {
         }
     }
 
+    void setPlayButton() {
+        mPlay = !mPlay;
+        Log.e("View", "playButtonListener mPlay : " + mPlay);
+
+        if (mPlay) {
+            playButton.setImageResource(R.drawable.stop);
+            mPreview.setPlay(true);
+            cameraPreview.setVisibility(View.INVISIBLE);
+            imageView.setVisibility(View.VISIBLE);
+        } else {
+            playButton.setImageResource(R.drawable.play);
+            mPreview.setPlay(false);
+            cameraPreview.setVisibility(View.VISIBLE);
+            imageView.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    void setSettingButton() {
+        Intent myIntent = new Intent(MainActivity.this, SettingActivity.class);
+        myIntent.putExtra("server_ip", mServerIp);
+        myIntent.putExtra("server_port", mServerPort);
+        myIntent.putExtra("image_size", mImageSize);
+        myIntent.putExtra("mode", mMode);
+        startActivityForResult(myIntent, 1);
+    }
+
     OnClickListener playButtonListener = new OnClickListener() {
         @Override
         public void onClick(View v) {
-            mPlay = !mPlay;
-            Log.e("View", "playButtonListener mPlay : " + mPlay);
-
-            if (mPlay) {
-                playButton.setImageResource(R.drawable.stop);
-                mPreview.setPlay(true);
-            } else {
-                playButton.setImageResource(R.drawable.play);
-                mPreview.setPlay(false);
-            }
+            setPlayButton();
         }
     };
 
     OnClickListener playButtonListener2 = new OnClickListener() {
         @Override
         public void onClick(View v) {
-            mPlay = !mPlay;
-            Log.e("View", "playButtonListener mPlay : " + mPlay);
-
-            if (mPlay) {
-                playButton2.setImageResource(R.drawable.stop);
-                mPreview.setPlay(true);
-            } else {
-                playButton2.setImageResource(R.drawable.play);
-                mPreview.setPlay(false);
-            }
+            setPlayButton();
         }
     };
 
     OnClickListener settingButtonListener = new OnClickListener() {
         @Override
         public void onClick(View v) {
-            Intent myIntent = new Intent(MainActivity.this, SettingActivity.class);
-            myIntent.putExtra("server_ip", mServerIp);
-            myIntent.putExtra("server_port", mServerPort);
-            myIntent.putExtra("image_size", mImageSize);
-            myIntent.putExtra("mode", mMode);
-            startActivityForResult(myIntent, 1);
+            setSettingButton();
         }
     };
 
     OnClickListener settingButtonListener2 = new OnClickListener() {
         @Override
         public void onClick(View v) {
-            Intent myIntent = new Intent(MainActivity.this, SettingActivity.class);
-            myIntent.putExtra("server_ip", mServerIp);
-            myIntent.putExtra("server_port", mServerPort);
-            myIntent.putExtra("image_size", mImageSize);
-            myIntent.putExtra("mode", mMode);
-            startActivityForResult(myIntent, 1);
+            setSettingButton();
         }
     };
 
@@ -310,7 +317,6 @@ public class MainActivity extends Activity {
                 //refresh the preview
 
                 mCamera = Camera.open(cameraId);
-                mPicture = getPictureCallback();
                 mPreview.refreshCamera(mCamera);
             }
         } else {
@@ -321,7 +327,6 @@ public class MainActivity extends Activity {
                 //refresh the preview
 
                 mCamera = Camera.open(cameraId);
-                mPicture = getPictureCallback();
                 mPreview.refreshCamera(mCamera);
             }
         }
@@ -342,36 +347,6 @@ public class MainActivity extends Activity {
         } else {
             return false;
         }
-    }
-
-    private PictureCallback getPictureCallback() {
-        PictureCallback picture = new PictureCallback() {
-
-            @Override
-            public void onPictureTaken(byte[] data, Camera camera) {
-                //make a new picture file
-                File pictureFile = getOutputMediaFile();
-
-                if (pictureFile == null) {
-                    return;
-                }
-                try {
-                    //write the file
-                    FileOutputStream fos = new FileOutputStream(pictureFile);
-                    fos.write(data);
-                    fos.close();
-                    Toast toast = Toast.makeText(myContext, "Picture saved: " + pictureFile.getName(), Toast.LENGTH_LONG);
-                    toast.show();
-
-                } catch (FileNotFoundException e) {
-                } catch (IOException e) {
-                }
-
-                //refresh camera to continue preview
-                mPreview.refreshCamera(mCamera);
-            }
-        };
-        return picture;
     }
 
     //make picture and save to a folder

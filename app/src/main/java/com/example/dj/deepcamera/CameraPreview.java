@@ -4,23 +4,33 @@ package com.example.dj.deepcamera;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.YuvImage;
+import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.support.annotation.ColorInt;
 import android.util.Log;
 import android.util.Pair;
 import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -37,6 +47,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -44,6 +55,7 @@ import java.net.URLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
@@ -54,6 +66,7 @@ import javax.net.ssl.HttpsURLConnection;
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
     private SurfaceHolder mHolder;
     private Camera mCamera;
+    private ImageView mImageView;
     private String img_folder;
     private List<Camera.Size> mSupportedPreviewSizes;
     //private Camera.Size mPreviewSize;
@@ -72,10 +85,11 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     int mDisplayWidth;
     int mDisplayHeight;
 
-    public CameraPreview(Context context, Camera camera) {
+    public CameraPreview(Context context, Camera camera, ImageView imageView) {
         super(context);
         mContext = context;
         mCamera = camera;
+        mImageView = imageView;
         mHolder = getHolder();
         mHolder.addCallback(this);
         // deprecated setting, but required on Android versions prior to 3.0
@@ -274,9 +288,9 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
                         String url = "http://" + mServerIp + ":" + mServerPort;
 
-                        Log.d(VIEW_LOG_TAG, "calling ProcessHttpTask() " + image.getWidth() + ", " + image.getHeight());
+                        //Log.d(VIEW_LOG_TAG, "calling ProcessHttpTask() " + image.getWidth() + ", " + image.getHeight());
 
-                        Runnable thread = new ProcessHttpTask(url, mMode, fileName, buffer);
+                        Runnable thread = new ProcessHttpTask(url, mMode, img_folder, fileName, buffer, mImageView);
                         executor.execute(thread);
 
                     } catch (Exception e) {
@@ -398,79 +412,25 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 class ProcessHttpTask implements Runnable {
     private String url;
     private String mode;
+    private String imageFolder;
     private String fileName;
     private byte[] data;
+    private ImageView imageView;
 
-    public ProcessHttpTask(String url, String mode, String fileName, byte[] data) {
+    public ProcessHttpTask(String url, String mode, String imageFolder, String fileName, byte[] data, ImageView imageView) {
         this.url = url;
         this.mode = mode;
+        this.imageFolder = imageFolder;
         this.fileName = fileName;
         this.data = data;
+        this.imageView = imageView;
     }
-
-    /*
-    @Override
-    protected Void doInBackground(Void... params) {
-        OutputStream outputToServer = null;
-
-        //Log.d("View", "doInBackground");
-
-        try {
-            String charset = "UTF-8";  // Or in Java 7 and later, use the constant: java.nio.charset.StandardCharsets.UTF_8.name()
-
-            HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
-            connection.setReadTimeout(10000);
-            connection.setConnectTimeout(15000);
-            connection.setRequestMethod("POST");
-            connection.setDoInput(true);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "image/jpeg");
-            //connection.setRequestProperty("Accept-Charset", charset);
-            //connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded;charset=" + charset);
-
-
-            OutputStream os = connection.getOutputStream();
-            os.write(data);
-            os.flush();
-            os.close();
-
-            connection.connect();
-
-            String response = "";
-            int responseCode=connection.getResponseCode();
-
-            if (responseCode == HttpsURLConnection.HTTP_OK) {
-                String line;
-                BufferedReader br=new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                while ((line=br.readLine()) != null) {
-                    response+=line;
-                }
-            }
-            else response = "";
-
-            //Log.d("View", "response : " + response);
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-
-            if (outputToServer != null) {
-                try {
-                    outputToServer.close();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
-*/
 
     @Override
     public void run() {
         OutputStream outputToServer = null;
 
-        Log.d("View", "doInBackground");
+        //Log.d("View", "doInBackground");
 
         String lineEnd = "\r\n";
         String twoHyphens = "--";
@@ -483,8 +443,8 @@ class ProcessHttpTask implements Runnable {
             byte[] postData       = urlParameters.getBytes( StandardCharsets.UTF_8 );
             int    postDataLength = postData.length;
             //String request        = "http://www.google.com";
-            String request        = "http://192.168.0.18:8080/";
-            URL    url            = new URL( request );
+            //String request        = "http://192.168.0.18:8080/";
+            URL    url            = new URL( this.url );
             HttpURLConnection conn= (HttpURLConnection) url.openConnection();
             conn.setDoOutput(true);
             conn.setInstanceFollowRedirects(false);
@@ -493,21 +453,6 @@ class ProcessHttpTask implements Runnable {
             conn.setRequestProperty("charset", "utf-8");
             //conn.setRequestProperty( "Content-Length", Integer.toString( postDataLength ));
             conn.setUseCaches(false);
-
-
-            /*
-            StringBuilder result = new StringBuilder();
-            result.append("name=");
-            result.append(this.fileName);
-            result.append("&data=");
-
-            OutputStream os = conn.getOutputStream();
-            os.write( result.toString().getBytes() );
-            os.write(this.data);
-            os.flush();
-            os.close();
-            */
-
             conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
 
             DataOutputStream dos = new DataOutputStream(conn.getOutputStream());
@@ -522,7 +467,7 @@ class ProcessHttpTask implements Runnable {
             dos.writeBytes("Content-Disposition: form-data; name=\"data\";filename=\"" + this.fileName +"\"" + lineEnd);
             dos.writeBytes(lineEnd);
 
-            Log.e(Tag,"Headers are written");
+            //Log.e(Tag,"Headers are written");
 
             dos.write(this.data);
 
@@ -549,64 +494,30 @@ class ProcessHttpTask implements Runnable {
             {
                 buff.append(line + "\n");
             }
-            data    = buff.toString().trim();
+            data = buff.toString().trim();
 
+            /*
             Log.d("View", "data : " + data);
-
-            /*
-            String charset = "UTF-8";  // Or in Java 7 and later, use the constant: java.nio.charset.StandardCharsets.UTF_8.name()
-            //String charset = "ISO-8859-1";
-
-            HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
-            connection.setReadTimeout(10000);
-            connection.setConnectTimeout(15000);
-            connection.setRequestMethod("POST");
-            connection.setDoInput(true);
-            connection.setDoOutput(true);
-            //connection.setRequestProperty("Content-Type", "image/jpeg");
-            //connection.setRequestProperty("Accept-Charset", charset);
-            //connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded;charset=" + charset);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-            StringBuilder result = new StringBuilder();
-            result.append(this.fileName);
-            result.append("&data=");
-
-            OutputStream os = connection.getOutputStream();
-            //BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, charset));
-            //writer.write(result.toString());
-            //writer.write(new String(data, charset));
-
-            //writer.flush();
-            //writer.close();
-
-            //os.write( result.toString().getBytes() );
-
-            String param = "xx=111&yy=222";
-            os.write( param.getBytes() );
-            //os.write(data);
-            os.flush();
-
-            os.close();
-
-            //connection.connect();
+            Log.d("View", "imageView.getVisibility() : " + imageView.getVisibility());
+            Log.d("View", "file : " + imageFolder + "/" + fileName);
             */
 
+            imageFolder = "data/camera";
+            //Bitmap myBitmap = BitmapFactory.decodeFile("/sdcard/" + imageFolder + "/" + fileName);
+            //imageView.setImageBitmap(myBitmap);
+            //imageView.setImageDrawable(Drawable.createFromPath(imageFolder + '/' + fileName));
+
             /*
-            String response = "";
-            int responseCode=connection.getResponseCode();
-
-            if (responseCode == HttpsURLConnection.HTTP_OK) {
-                String line;
-                BufferedReader br=new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                while ((line=br.readLine()) != null) {
-                    response+=line;
-                }
-            }
-            else response = "";
+            if (Math.random() > 0.5)
+                //imageView.setImageDrawable(Drawable.createFromPath("/mnt/sdcard/DCIM/100LGDSC/1423365220314.jpeg"));
+                new BitmapWorkerTask(imageView, "/mnt/sdcard/DCIM/100LGDSC/1423365220314.jpeg").execute();
+            else
+                //imageView.setImageDrawable(Drawable.createFromPath("/mnt/sdcard/DCIM/100LGDSC/1420536102739.jpeg"));
+                new BitmapWorkerTask(imageView, "/mnt/sdcard/DCIM/100LGDSC/1420536102739.jpeg").execute();
             */
+            new BitmapWorkerTask(data, imageView, "/mnt/sdcard/" + imageFolder + "/" + fileName).execute();
+            //imageView.setImageDrawable(Drawable.createFromPath("/mnt/sdcard/" + imageFolder + "/" + fileName));
 
-            //Log.d("View", "response : " + response);
         }
         catch (Exception e) {
             e.printStackTrace();
@@ -623,78 +534,6 @@ class ProcessHttpTask implements Runnable {
     }
 
 
-/*
-    @Override
-    protected Void doInBackground(Void... params) {
-        OutputStream outputToServer = null;
-
-        //Log.d("View", "doInBackground");
-
-        try {
-            Log.d("View", "this.url : " + this.url);
-
-            //URL url = new URL("http://www.naver.com");
-            URL url = new URL(this.url);
-            HttpURLConnection con = (HttpURLConnection) url.openConnection();
-            // 서버로부터 메세지를 받을 수 있도록 한다. 기본값은 true이다.
-            con.setDoInput(true);
-
-            // 헤더값을 설정한다.
-            con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-            // 전달 방식을 설정한다. POST or GET, 기본값은 GET 이다.
-            con.setRequestMethod("POST");
-
-            // 서버로 데이터를 전송할 수 있도록 한다. GET방식이면 사용될 일이 없으나, true로 설정하면 자동으로 POST로 설정된다. 기본값은 false이다.
-            con.setDoOutput(true);
-
-            // POST방식이면 서버에 별도의 파라메터값을 넘겨주어야 한다.
-            String param    = "ID=rQ+g4R8qmTlAey1Wn/PwUA==&cust_no=vBiSI2BWVsu6lK03U7dsfA==&prom_no=";
-            //String param    = "ID="+ JspUtil.urlEncode(sNetMableID)+"&cust_no="+ JspUtil.urlEncode(sEncCustNo)+"&prom_no="+prom_no;
-
-            OutputStream out_stream = con.getOutputStream();
-
-            out_stream.write( param.getBytes("UTF-8") );
-            out_stream.flush();
-            out_stream.close();
-
-
-
-
-            InputStream is      = null;
-            BufferedReader in   = null;
-            String data         = "";
-
-            is  = con.getInputStream();
-            in  = new BufferedReader(new InputStreamReader(is), 8 * 1024);
-
-            String line = null;
-            StringBuffer buff   = new StringBuffer();
-
-            while ( ( line = in.readLine() ) != null )
-            {
-                buff.append(line + "\n");
-            }
-            data    = buff.toString().trim();
-
-            Log.d("View", "data : " + data);
-
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-
-            if (outputToServer != null) {
-                try {
-                    outputToServer.close();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return null;
-    }
-*/
     private String getQuery(List<Pair> params) throws UnsupportedEncodingException
     {
         StringBuilder result = new StringBuilder();
@@ -713,5 +552,198 @@ class ProcessHttpTask implements Runnable {
         }
 
         return result.toString();
+    }
+}
+
+class BitmapWorkerTask extends AsyncTask<Integer, Void, Bitmap> {
+    private final WeakReference<ImageView> imageViewReference;
+    private int data = 0;
+    private String jsonData;
+    private String filePath;
+
+    private int getColor(String key) {
+        if (key.equals("1"))
+            return Color.BLUE;
+        else if (key.equals("2"))
+            return Color.RED;
+        else if (key.equals("3"))
+            return Color.GRAY;
+        else if (key.equals("4"))
+            return Color.BLACK;
+        else if (key.equals("5"))
+            return Color.rgb(0xA5, 0x2a, 0x2a);
+        else if (key.equals("6"))
+            return Color.CYAN;
+        else if (key.equals("7"))
+            return Color.GREEN;
+        else if (key.equals("8"))
+            return Color.MAGENTA;
+        else if (key.equals("9"))
+            return Color.rgb(0xff, 0xa5, 0x00);
+        else if (key.equals("10"))
+            return Color.YELLOW;
+        else if (key.equals("11"))
+            return Color.rgb(0xff, 0xc0, 0xcb);
+        else if (key.equals("12"))
+            return Color.rgb(0x80, 0x00, 0x80);
+        else if (key.equals("13"))
+            return Color.rgb(0xee, 0x82, 0xee);
+        else if (key.equals("14"))
+            return Color.rgb(0xdd, 0xa0, 0xdd);
+        else if (key.equals("15"))
+            return Color.rgb(0x7f, 0xff, 0xd4);
+        else if (key.equals("16"))
+            return Color.rgb(0xff, 0xd7, 0x00);
+        else if (key.equals("17"))
+            return Color.rgb(0xf0, 0xe6, 0x8c);
+        else if (key.equals("18"))
+            return Color.rgb(0x00, 0x00, 0x80);
+        else if (key.equals("19"))
+            return Color.rgb(0xda, 0x70, 0xd6);
+        else if (key.equals("20"))
+            return Color.rgb(0xff, 0x7f, 0x50);
+        else
+            return Color.WHITE;
+    }
+
+    private String getClassText(String key) {
+        if (key.equals("1"))
+            return "aeroplane";
+        else if (key.equals("2"))
+            return "bicycle";
+        else if (key.equals("3"))
+            return "bird";
+        else if (key.equals("4"))
+            return "boat";
+        else if (key.equals("5"))
+            return "bottle";
+        else if (key.equals("6"))
+            return "bus";
+        else if (key.equals("7"))
+            return "car";
+        else if (key.equals("8"))
+            return "cat";
+        else if (key.equals("9"))
+            return "chair";
+        else if (key.equals("10"))
+            return "cow";
+        else if (key.equals("11"))
+            return "diningtable";
+        else if (key.equals("12"))
+            return "dog";
+        else if (key.equals("13"))
+            return "horse";
+        else if (key.equals("14"))
+            return "motorbike";
+        else if (key.equals("15"))
+            return "person";
+        else if (key.equals("16"))
+            return "pottedplant";
+        else if (key.equals("17"))
+            return "sheep";
+        else if (key.equals("18"))
+            return "sofa";
+        else if (key.equals("19"))
+            return "train";
+        else if (key.equals("20"))
+            return "tvmonitor";
+        return "NA";
+    }
+
+    public BitmapWorkerTask(String jsonData, ImageView imageView, String filePath) {
+        this.jsonData = jsonData;
+        this.filePath = filePath;
+        // Use a WeakReference to ensure the ImageView can be garbage collected
+        imageViewReference = new WeakReference<ImageView>(imageView);
+    }
+
+    // Decode image in background.
+    @Override
+    protected Bitmap doInBackground(Integer... params) {
+        return BitmapFactory.decodeFile(filePath);
+    }
+
+    // Once complete, see if ImageView is still around and set bitmap.
+    @Override
+    protected void onPostExecute(Bitmap bitmap) {
+        Log.d("View", "jsonData : " + jsonData);
+        if (jsonData == null || jsonData.equals("NULL RESPONSE") == true)
+            return;
+
+        if (imageViewReference != null && bitmap != null) {
+            final ImageView imageView = imageViewReference.get();
+            if (imageView != null) {
+                Paint paint = new Paint();
+
+                Bitmap myBitmap = BitmapFactory.decodeFile(filePath);
+                if (myBitmap == null)
+                    return;
+
+                if (jsonData.equals("{}") == true) {
+                    imageView.setImageBitmap(myBitmap);
+                    return;
+                }
+
+
+                Bitmap newBitmap = Bitmap.createBitmap(myBitmap.getWidth(), myBitmap.getHeight(), Bitmap.Config.RGB_565);
+                Canvas tempCanvas = new Canvas(newBitmap);
+
+                //Draw the image bitmap into the cavas
+                tempCanvas.drawBitmap(myBitmap, 0, 0, null);
+
+                try {
+                    JSONObject jsonRootObject = new JSONObject(jsonData);
+
+                    Iterator<String> iter = jsonRootObject.keys();
+
+                    while (iter.hasNext()) {
+                        String key = iter.next();
+                        JSONArray jsonArray = jsonRootObject.getJSONArray(key);
+
+                        int classColor = getColor(key);
+
+                        for (int i = 0; i < jsonArray.length(); i++) {
+                            JSONArray coords = jsonArray.getJSONArray(i);
+
+                            paint.setStyle(Paint.Style.FILL);
+                            paint.setColor(Color.WHITE);
+                            tempCanvas.drawRect(coords.getInt(0), coords.getInt(1) - 20, coords.getInt(0) + 150, coords.getInt(1), paint);
+                            paint.setColor(Color.BLACK);
+                            paint.setTextSize(20);
+                            tempCanvas.drawText(getClassText(key), coords.getInt(0), coords.getInt(1) - 5, paint);
+
+                            //Log.d("View", "drawText() : " + getClassText(key) + ", (" + coords.getInt(0) + ", " + (coords.getInt(1) - 5) + ")");
+
+                            paint.setStrokeWidth(5);
+                            paint.setStyle(Paint.Style.STROKE);
+                            paint.setColor(classColor);
+                            tempCanvas.drawRect(coords.getInt(0), coords.getInt(1), coords.getInt(2), coords.getInt(3), paint);
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                // DJDJ
+                /*
+                if (1 == 1) {
+                    //Log.d("View", "jsonData : " + jsonData);
+                    return;
+                }
+                */
+
+                /*
+                int scaledHeight = (imageView.getWidth()*myBitmap.getHeight())/myBitmap.getWidth();
+                Bitmap scaledBitmap = Bitmap.createScaledBitmap(newBitmap, imageView.getWidth(), scaledHeight, true);
+
+                Log.d("View", "myBitmap : " + myBitmap.getWidth() + ", " + myBitmap.getHeight());
+                Log.d("View", "imageView : " + imageView.getWidth() + ", " + imageView.getHeight());
+                Log.d("View", "scaledBitmap : " + scaledBitmap.getWidth() + ", " + scaledBitmap.getHeight());
+                */
+
+                imageView.setImageBitmap(newBitmap);
+                //imageView.setImageBitmap(scaledBitmap);
+            }
+        }
     }
 }
